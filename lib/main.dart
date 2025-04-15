@@ -4,10 +4,14 @@ import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle, Animati
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:intl/intl.dart';
 
+
 import 'models/sensor_data.dart';
 import 'services/serial_service.dart';
 import 'screens/settings_screen.dart';
 import 'screens/help_screen.dart';
+import 'screens/reports_screen.dart';
+import 'screens/gardens_screen.dart';
+import 'screens/diagnostic_screen.dart';
 
 void main() {
   runApp(const MyApp());
@@ -21,10 +25,48 @@ class MyApp extends StatelessWidget {
     return ChangeNotifierProvider(
       create: (_) => DashboardProvider(),
       child: MaterialApp(
+        debugShowCheckedModeBanner: false,
         title: 'Cultivos Dashboard',
         theme: ThemeData(
-          colorScheme: ColorScheme.fromSeed(seedColor: Colors.green),
+          colorScheme: ColorScheme(
+            primary: const Color(0xFF2E7D32), // Verde principal
+            onPrimary: Colors.white,
+            primaryContainer: const Color(0xFFAED581),
+            onPrimaryContainer: const Color(0xFF1B5E20),
+            secondary: const Color(0xFF1976D2), // Azul secundario
+            onSecondary: Colors.white,
+            secondaryContainer: const Color(0xFFBBDEFB),
+            onSecondaryContainer: const Color(0xFF0D47A1),
+            tertiary: const Color(0xFFFFA000), // Acento amarillo/naranja
+            onTertiary: Colors.white,
+            tertiaryContainer: const Color(0xFFFFE082),
+            onTertiaryContainer: const Color(0xFFE65100),
+            error: Colors.red,
+            onError: Colors.white,
+            errorContainer: const Color(0xFFFFCDD2),
+            onErrorContainer: const Color(0xFFB71C1C),
+            background: const Color(0xFFFFFFFF), // Blanco de fondo
+            onBackground: const Color(0xFF333333), // Gris oscuro para texto
+            surface: const Color(0xFFFFFFFF),
+            onSurface: const Color(0xFF333333),
+            surfaceVariant: const Color(0xFFF5F5F5),
+            onSurfaceVariant: const Color(0xFF666666),
+            outline: const Color(0xFFBDBDBD),
+            shadow: const Color(0x40000000),
+            inverseSurface: const Color(0xFF333333),
+            onInverseSurface: const Color(0xFFFFFFFF),
+            inversePrimary: const Color(0xFFA5D6A7),
+            surfaceTint: const Color(0xFF2E7D32),
+            brightness: Brightness.light,
+          ),
           useMaterial3: true,
+          textTheme: const TextTheme(
+            bodyLarge: TextStyle(color: Color(0xFF333333)),
+            bodyMedium: TextStyle(color: Color(0xFF333333)),
+            titleLarge: TextStyle(color: Color(0xFF333333)),
+            titleMedium: TextStyle(color: Color(0xFF333333)),
+            titleSmall: TextStyle(color: Color(0xFF333333)),
+          ),
         ),
         home: const MainScreen(),
       ),
@@ -137,9 +179,13 @@ class MainScreen extends StatefulWidget {
 
 class _MainScreenState extends State<MainScreen> {
   int _selectedIndex = 0;
+  final GlobalKey<ScaffoldState> _scaffoldKey = GlobalKey<ScaffoldState>();
   
   static const List<Widget> _screens = [
     DashboardScreen(title: 'Dashboard'),
+    ReportsScreen(),
+    GardensScreen(),
+    DiagnosticScreen(),
     SettingsScreen(),
     HelpScreen(),
   ];
@@ -148,6 +194,10 @@ class _MainScreenState extends State<MainScreen> {
     setState(() {
       _selectedIndex = index;
     });
+    // Close drawer on mobile after selection
+    if (MediaQuery.of(context).size.width < 800) {
+      _scaffoldKey.currentState?.closeDrawer();
+    }
   }
   
   @override
@@ -155,145 +205,190 @@ class _MainScreenState extends State<MainScreen> {
     final colorScheme = Theme.of(context).colorScheme;
     final isDesktop = MediaQuery.of(context).size.width >= 800;
     
-    return Scaffold(
-      body: Row(
-        children: [
-          // Enhanced Sidebar
-          Container(
-            width: isDesktop ? 250 : 72,
-            decoration: BoxDecoration(
-              color: colorScheme.primaryContainer.withOpacity(0.9),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black12,
-                  blurRadius: 5,
-                  offset: const Offset(0, 2),
-                ),
-              ],
-            ),
-            child: Column(
-              children: [
-                // App Logo/Title
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 24),
-                  alignment: Alignment.center,
-                  child: isDesktop
-                      ? Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.eco,
-                              size: 32,
-                              color: colorScheme.primary,
-                            ),
-                            const SizedBox(width: 12),
-                            Text(
-                              'Cultivos',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        )
-                      : Icon(
-                          Icons.eco,
-                          size: 32,
-                          color: colorScheme.primary,
-                        ),
-                ),
-                const Divider(),
-                // Navigation Items
-                Expanded(
-                  child: ListView(
-                    padding: EdgeInsets.zero,
-                    children: [
-                      _buildNavItem(
-                        icon: Icons.dashboard,
-                        label: 'Dashboard',
-                        index: 0,
-                        isDesktop: isDesktop,
-                      ),
-                      _buildNavItem(
-                        icon: Icons.settings,
-                        label: 'Settings',
-                        index: 1,
-                        isDesktop: isDesktop,
-                      ),
-                      _buildNavItem(
-                        icon: Icons.help,
-                        label: 'Help',
-                        index: 2,
-                        isDesktop: isDesktop,
-                      ),
-                    ],
+    // Build the sidebar content that will be used in both desktop and mobile views
+    Widget sidebarContent = Column(
+      children: [
+        // App Logo/Title
+        Container(
+          padding: const EdgeInsets.symmetric(vertical: 24),
+          alignment: Alignment.center,
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.eco,
+                size: 32,
+                color: colorScheme.primary,
+              ),
+              if (isDesktop || MediaQuery.of(context).size.width < 800) ...[  // Always show text in drawer
+                const SizedBox(width: 12),
+                Text(
+                  'Cultivos',
+                  style: TextStyle(
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
                   ),
                 ),
-                // User profile section at bottom
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  child: isDesktop
-                      ? Row(
-                          children: [
-                            CircleAvatar(
-                              backgroundColor: colorScheme.primary,
-                              radius: 20,
-                              child: const Icon(
-                                Icons.person,
-                                color: Colors.white,
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'User',
-                                    style: TextStyle(
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Administrator',
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        )
-                      : CircleAvatar(
-                          backgroundColor: colorScheme.primary,
-                          radius: 20,
-                          child: const Icon(
-                            Icons.person,
-                            color: Colors.white,
-                          ),
-                        ),
-                ),
               ],
-            ),
+            ],
           ),
+        ),
+        const Divider(),
+        // Navigation Items
+        Expanded(
+          child: ListView(
+            padding: EdgeInsets.zero,
+            children: [
+              _buildNavItem(
+                icon: Icons.dashboard,
+                label: 'Monitoreo',
+                index: 0,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+              _buildNavItem(
+                icon: Icons.assessment,
+                label: 'Reportes',
+                index: 1,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+              _buildNavItem(
+                icon: Icons.eco,
+                label: 'Huertas',
+                index: 2,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+              _buildNavItem(
+                icon: Icons.analytics,
+                label: 'Diagnóstico',
+                index: 3,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+              _buildNavItem(
+                icon: Icons.settings,
+                label: 'Settings',
+                index: 4,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+              _buildNavItem(
+                icon: Icons.help,
+                label: 'Help',
+                index: 5,
+                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+              ),
+            ],
+          ),
+        ),
+        // User profile section at bottom
+        Container(
+          padding: const EdgeInsets.all(16),
+          child: (isDesktop || MediaQuery.of(context).size.width < 800)  // Show full profile in drawer
+              ? Row(
+                  children: [
+                    CircleAvatar(
+                      backgroundColor: colorScheme.primary,
+                      radius: 20,
+                      child: const Icon(
+                        Icons.person,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'User',
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            'Administrator',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                )
+              : CircleAvatar(
+                  backgroundColor: colorScheme.primary,
+                  radius: 20,
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                  ),
+                ),
+        ),
+      ],
+    );
+    
+    return Scaffold(
+      key: _scaffoldKey,
+      // Show AppBar only on mobile
+      appBar: !isDesktop ? AppBar(
+        backgroundColor: colorScheme.primaryContainer,
+        elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
+        title: Text(
+          'Cultivos',
+          style: TextStyle(
+            fontWeight: FontWeight.bold,
+            color: colorScheme.primary,
+          ),
+        ),
+        leading: IconButton(
+          icon: const Icon(Icons.menu),
+          onPressed: () {
+            _scaffoldKey.currentState?.openDrawer();
+          },
+        ),
+      ) : null,
+      // Use drawer for mobile and sidebar for desktop
+      drawer: !isDesktop ? Drawer(
+        elevation: 2,
+        child: sidebarContent,
+      ) : null,
+      body: Row(
+        children: [
+          // Show sidebar only on desktop
+          if (isDesktop)
+            Container(
+              width: 250,
+              decoration: BoxDecoration(
+                color: colorScheme.primaryContainer.withOpacity(0.9),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 5,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: sidebarContent,
+            ),
           // Main content with enhanced styling
           Expanded(
             child: Container(
               decoration: BoxDecoration(
                 color: colorScheme.surface,
-                borderRadius: const BorderRadius.only(
+                borderRadius: isDesktop ? const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   bottomLeft: Radius.circular(16),
-                ),
+                ) : null,
               ),
               child: ClipRRect(
-                borderRadius: const BorderRadius.only(
+                borderRadius: isDesktop ? const BorderRadius.only(
                   topLeft: Radius.circular(16),
                   bottomLeft: Radius.circular(16),
-                ),
+                ) : BorderRadius.zero,
                 child: _screens[_selectedIndex],
               ),
             ),
@@ -360,11 +455,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final provider = Provider.of<DashboardProvider>(context);
     final latestData = provider.latestData;
     final colorScheme = Theme.of(context).colorScheme;
+    final isDesktop = MediaQuery.of(context).size.width >= 800;
     
     return Scaffold(
       appBar: AppBar(
         backgroundColor: colorScheme.primaryContainer,
         elevation: 0,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
         title: Text(
           widget.title,
           style: TextStyle(
@@ -372,16 +471,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: colorScheme.primary,
           ),
         ),
-        actions: [
-          IconButton(
-            icon: Icon(
-              provider.isConnected ? Icons.link : Icons.link_off,
-              color: provider.isConnected ? Colors.green : Colors.red,
-            ),
-            onPressed: _showConnectionDialog,
-            tooltip: 'Connection Settings',
-          ),
-        ],
+        // No connection button in the app bar since connection is automatic
+        actions: [],
       ),
       body: latestData == null
           ? Center(
@@ -401,14 +492,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   const SizedBox(height: 8),
                   const Text('Connect to a device to start monitoring'),
                   const SizedBox(height: 24),
-                  ElevatedButton.icon(
-                    onPressed: _showConnectionDialog,
-                    icon: const Icon(Icons.link),
-                    label: const Text('Connect Device'),
-                    style: ElevatedButton.styleFrom(
-                      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                    ),
-                  ),
+                  // Connect button removed since connection is automatic
                 ],
               ),
             )
@@ -439,56 +523,100 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             end: Alignment.bottomRight,
                           ),
                         ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
+                        child: MediaQuery.of(context).size.width > 600
+                          // Desktop/tablet layout
+                          ? Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
                               children: [
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(
-                                    color: provider.isConnected 
-                                        ? Colors.green.withOpacity(0.2) 
-                                        : Colors.red.withOpacity(0.2),
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Icon(
-                                    provider.isConnected ? Icons.check_circle : Icons.error,
-                                    color: provider.isConnected ? Colors.green : Colors.red,
-                                  ),
-                                ),
-                                const SizedBox(width: 16),
-                                Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                Row(
                                   children: [
-                                    Text(
-                                      provider.isConnected ? 'Connected' : 'Disconnected',
-                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                    Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: provider.isConnected 
+                                            ? Colors.green.withOpacity(0.2) 
+                                            : Colors.red.withOpacity(0.2),
+                                        borderRadius: BorderRadius.circular(12),
+                                      ),
+                                      child: Icon(
+                                        provider.isConnected ? Icons.check_circle : Icons.error,
+                                        color: provider.isConnected ? Colors.green : Colors.red,
+                                      ),
                                     ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      'Last Update: ${DateFormat('HH:mm:ss').format(latestData.timestamp)}',
-                                      style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                    const SizedBox(width: 16),
+                                    Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          provider.isConnected ? 'Connected' : 'Disconnected',
+                                          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Last Update: ${DateFormat('HH:mm:ss').format(latestData.timestamp)}',
+                                          style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                        ),
+                                      ],
                                     ),
                                   ],
                                 ),
+                                IconButton(
+                                  icon: const Icon(Icons.refresh),
+                                  onPressed: () async {
+                                    await provider.refreshDevices();
+                                    if (provider.serialService.devices.isNotEmpty) {
+                                      await provider.connectToDevice(provider.serialService.devices[0]);
+                                    }
+                                  },
+                                  tooltip: 'Refresh USB Devices',
+                                ),
+                              ],
+                            )
+                          // Mobile layout
+                          : Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.all(12),
+                                          decoration: BoxDecoration(
+                                            color: provider.isConnected 
+                                                ? Colors.green.withOpacity(0.2) 
+                                                : Colors.red.withOpacity(0.2),
+                                            borderRadius: BorderRadius.circular(12),
+                                          ),
+                                          child: Icon(
+                                            provider.isConnected ? Icons.check_circle : Icons.error,
+                                            color: provider.isConnected ? Colors.green : Colors.red,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 16),
+                                        Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              provider.isConnected ? 'Connected' : 'Disconnected',
+                                              style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
+                                            ),
+                                            const SizedBox(height: 4),
+                                            Text(
+                                              'Last Update: ${DateFormat('HH:mm:ss').format(latestData.timestamp)}',
+                                              style: TextStyle(color: colorScheme.onSurfaceVariant),
+                                            ),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 16),
+                                // Connection button removed since connection is automatic
                               ],
                             ),
-                            ElevatedButton.icon(
-                              onPressed: _showConnectionDialog,
-                              icon: Icon(provider.isConnected ? Icons.link_off : Icons.link),
-                              label: Text(provider.isConnected ? 'Disconnect' : 'Connect'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: provider.isConnected 
-                                    ? colorScheme.errorContainer 
-                                    : colorScheme.primaryContainer,
-                                foregroundColor: provider.isConnected 
-                                    ? colorScheme.error 
-                                    : colorScheme.primary,
-                              ),
-                            ),
-                          ],
-                        ),
                       ),
                     ),
                     
@@ -509,11 +637,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     
                     // Gauges in a grid layout for better responsiveness
                     GridView.count(
-                      crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : 2,
+                      crossAxisCount: MediaQuery.of(context).size.width > 900 ? 3 : 
+                                     MediaQuery.of(context).size.width > 600 ? 2 : 1,
                       crossAxisSpacing: 16,
                       mainAxisSpacing: 16,
                       shrinkWrap: true,
                       physics: const NeverScrollableScrollPhysics(),
+                      childAspectRatio: MediaQuery.of(context).size.width > 600 ? 1.2 : 1.5,
                       children: [
                         _buildGauge(
                           'Temperature', 
@@ -595,7 +725,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             const Divider(),
                             const SizedBox(height: 8),
                             SizedBox(
-                              height: 300,
+                              height: MediaQuery.of(context).size.width > 600 ? 300 : 250,
                               child: _buildHistoricalChart(provider.dataHistory),
                             ),
                           ],
@@ -612,12 +742,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildGauge(String title, double value, double min, double max, String unit, Color color) {
     final colorScheme = Theme.of(context).colorScheme;
     final formattedValue = value.toStringAsFixed(1);
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
     
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
       child: Container(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(isSmallScreen ? 12.0 : 16.0),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           gradient: LinearGradient(
@@ -635,16 +766,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontWeight: FontWeight.bold,
-                    fontSize: 16,
-                    color: colorScheme.onSurface,
+                Flexible(
+                  child: Row(
+                    children: [
+                      Icon(getIconForSensor(title), color: color, size: isSmallScreen ? 14 : 16),
+                      const SizedBox(width: 6),
+                      Flexible(
+                        child: Text(
+                          title,
+                          style: TextStyle(
+                            fontWeight: FontWeight.bold,
+                            fontSize: isSmallScreen ? 14 : 16,
+                            color: colorScheme.onSurface,
+                          ),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                  padding: EdgeInsets.symmetric(horizontal: isSmallScreen ? 6 : 8, vertical: 4),
                   decoration: BoxDecoration(
                     color: color.withOpacity(0.2),
                     borderRadius: BorderRadius.circular(12),
@@ -654,14 +796,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     style: TextStyle(
                       fontWeight: FontWeight.bold,
                       color: color,
+                      fontSize: isSmallScreen ? 12 : 14,
                     ),
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 16),
+            SizedBox(height: isSmallScreen ? 12 : 16),
             SizedBox(
-              height: 150,
+              height: isSmallScreen ? 120 : 150,
               child: SfRadialGauge(
                 axes: <RadialAxis>[
                   RadialAxis(
@@ -708,10 +851,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         animationType: AnimationType.ease,
                         needleColor: color,
                         needleLength: 0.6,
-                        needleStartWidth: 1,
-                        needleEndWidth: 5,
+                        needleStartWidth: isSmallScreen ? 0.5 : 1,
+                        needleEndWidth: isSmallScreen ? 4 : 5,
                         knobStyle: KnobStyle(
-                          knobRadius: 0.08,
+                          knobRadius: isSmallScreen ? 0.07 : 0.08,
                           sizeUnit: GaugeSizeUnit.factor,
                           color: color,
                         ),
@@ -719,20 +862,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     ],
                     annotations: <GaugeAnnotation>[
                       GaugeAnnotation(
-                        widget: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(getIconForSensor(title), color: color, size: 16),
-                            const SizedBox(height: 2),
-                            Text(
-                              getStatusForValue(title, value),
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: getColorForStatus(title, value),
-                              ),
+                        widget: Container(
+                          padding: EdgeInsets.all(isSmallScreen ? 4 : 6),
+                          decoration: BoxDecoration(
+                            color: getColorForStatus(title, value).withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            getStatusForValue(title, value),
+                            style: TextStyle(
+                              fontSize: isSmallScreen ? 10 : 12,
+                              fontWeight: FontWeight.bold,
+                              color: getColorForStatus(title, value),
                             ),
-                          ],
+                          ),
                         ),
                         angle: 90,
                         positionFactor: 0.8,
@@ -817,31 +960,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
   
   Widget _buildHistoricalChart(List<SensorData> dataHistory) {
     final colorScheme = Theme.of(context).colorScheme;
+    final isSmallScreen = MediaQuery.of(context).size.width < 600;
     
     return SfCartesianChart(
       plotAreaBorderWidth: 0,
-      margin: const EdgeInsets.all(8),
+      margin: EdgeInsets.all(isSmallScreen ? 4 : 8),
       primaryXAxis: DateTimeAxis(
         dateFormat: DateFormat('HH:mm:ss'),
         intervalType: DateTimeIntervalType.seconds,
         majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
         axisLine: const AxisLine(width: 0),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 10),
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
+        labelIntersectAction: AxisLabelIntersectAction.hide,
+        maximumLabels: isSmallScreen ? 3 : 5,
       ),
       primaryYAxis: NumericAxis(
         title: AxisTitle(
           text: 'Values',
-          textStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 12),
+          textStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 10 : 12),
         ),
         majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
         axisLine: const AxisLine(width: 0),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: 10),
+        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
       ),
       legend: Legend(
         isVisible: true,
-        position: LegendPosition.bottom,
+        position: isSmallScreen ? LegendPosition.top : LegendPosition.bottom,
         overflowMode: LegendItemOverflowMode.wrap,
-        textStyle: TextStyle(color: colorScheme.onSurface, fontSize: 12),
+        textStyle: TextStyle(color: colorScheme.onSurface, fontSize: isSmallScreen ? 10 : 12),
+        itemPadding: isSmallScreen ? 4 : 8,
       ),
       tooltipBehavior: TooltipBehavior(
         enable: true,
@@ -947,74 +1094,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
   
   void _showConnectionDialog() {
-    final provider = Provider.of<DashboardProvider>(context, listen: false);
-    
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Connection Settings'),
-        content: StatefulBuilder(
-          builder: (context, setState) {
-            return SizedBox(
-              width: 300,
-              height: 300,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text('Status: ${provider.isConnected ? "Connected" : "Disconnected"}'),
-                  const SizedBox(height: 16),
-                  const Text('Available Devices:'),
-                  const SizedBox(height: 8),
-                  Expanded(
-                    child: provider.serialService.devices.isEmpty
-                        ? const Center(child: Text('No devices found'))
-                        : ListView.builder(
-                            itemCount: provider.serialService.devices.length,
-                            itemBuilder: (context, index) {
-                              final device = provider.serialService.devices[index];
-                              return ListTile(
-                                title: Text(device.productName ?? 'Unknown Device'),
-                                subtitle: Text('VID: ${device.vid}, PID: ${device.pid}'),
-                                trailing: ElevatedButton(
-                                  onPressed: () async {
-                                    Navigator.pop(context);
-                                    await provider.connectToDevice(device);
-                                  },
-                                  child: const Text('Connect'),
-                                ),
-                              );
-                            },
-                          ),
-                  ),
-                ],
-              ),
-            );
-          },
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await provider.refreshDevices();
-              setState(() {});
-            },
-            child: const Text('Refresh'),
-          ),
-          if (provider.isConnected)
-            TextButton(
-              onPressed: () async {
-                await provider.disconnect();
-                Navigator.pop(context);
-              },
-              child: const Text('Disconnect'),
-            ),
-          TextButton(
-            onPressed: () {
-              Navigator.pop(context);
-            },
-            child: const Text('Close'),
-          ),
-        ],
-      ),
-    );
+    // This method is now empty as we're removing manual connection functionality
+    // The connection happens automatically when the app starts
   }
 }

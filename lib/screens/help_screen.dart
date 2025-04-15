@@ -8,6 +8,9 @@ class HelpScreen extends StatelessWidget {
     return Scaffold(
       appBar: AppBar(
         backgroundColor: Theme.of(context).colorScheme.inversePrimary,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.zero,
+        ),
         title: const Text('Help & Support'),
       ),
       body: SingleChildScrollView(
