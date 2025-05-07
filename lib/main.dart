@@ -3,6 +3,8 @@ import 'package:provider/provider.dart';
 import 'package:syncfusion_flutter_charts/charts.dart' hide CornerStyle, AnimationType;
 import 'package:syncfusion_flutter_gauges/gauges.dart';
 import 'package:intl/intl.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
 
 
 import 'models/sensor_data.dart';
@@ -12,8 +14,14 @@ import 'screens/help_screen.dart';
 import 'screens/reports_screen.dart';
 import 'screens/gardens_screen.dart';
 import 'screens/diagnostic_screen.dart';
+import 'screens/usb_diagnostic_screen.dart';
 
 void main() {
+  // Inicializar sqflite_ffi para Windows
+  sqfliteFfiInit();
+  // Establecer databaseFactory para usar con sqflite_common_ffi
+  databaseFactory = databaseFactoryFfi;
+  
   runApp(const MyApp());
 }
 
@@ -26,17 +34,17 @@ class MyApp extends StatelessWidget {
       create: (_) => DashboardProvider(),
       child: MaterialApp(
         debugShowCheckedModeBanner: false,
-        title: 'Cultivos Dashboard',
+        title: 'GrowSense',
         theme: ThemeData(
           colorScheme: ColorScheme(
-            primary: const Color(0xFF2E7D32), // Verde principal
+            primary: const Color(0xFF74B43F), // Verde GrowSense
             onPrimary: Colors.white,
-            primaryContainer: const Color(0xFFAED581),
-            onPrimaryContainer: const Color(0xFF1B5E20),
-            secondary: const Color(0xFF1976D2), // Azul secundario
+            primaryContainer: const Color(0xFF74B43F),
+            onPrimaryContainer: Colors.white,
+            secondary: const Color(0xFF4B8B1D), // Verde oscuro GrowSense
             onSecondary: Colors.white,
-            secondaryContainer: const Color(0xFFBBDEFB),
-            onSecondaryContainer: const Color(0xFF0D47A1),
+            secondaryContainer: const Color(0xFF4B8B1D),
+            onSecondaryContainer: Colors.white,
             tertiary: const Color(0xFFFFA000), // Acento amarillo/naranja
             onTertiary: Colors.white,
             tertiaryContainer: const Color(0xFFFFE082),
@@ -92,15 +100,21 @@ class DashboardProvider with ChangeNotifier {
   Future<void> _init() async {
     // Listen for data updates
     _serialService.dataStream.listen((data) {
-      _latestData = data;
-      _dataHistory.add(data);
-      
-      // Keep only the last 50 data points for the chart
-      if (_dataHistory.length > 50) {
-        _dataHistory.removeAt(0);
+      // Only process and add data if it's not a zero value or if we're connected
+      if (_serialService.isConnected || 
+          (data.temperature > 0 || data.humidity > 0 || 
+           data.conductivity > 0 || data.ph > 0 || 
+           data.nutrients > 0 || data.fertility > 0)) {
+        _latestData = data;
+        _dataHistory.add(data);
+        
+        // Keep only the last 50 data points for the chart
+        if (_dataHistory.length > 50) {
+          _dataHistory.removeAt(0);
+        }
+        
+        notifyListeners();
       }
-      
-      notifyListeners();
     });
     
     // Listen for connection status changes
@@ -109,30 +123,23 @@ class DashboardProvider with ChangeNotifier {
       notifyListeners();
     });
     
-    // For demo purposes, add sample data
-    if (!_isConnected) {
-      _addSampleData();
-    }
+    // No longer adding sample data when disconnected to prevent graph disorder
+    // if (!_isConnected) {
+    //   _addSampleData();
+    // }
   }
   
   void _addSampleData() {
-    // Add some sample data for preview purposes
-    _latestData = SensorData.sample();
+    // Add zero values when no device is connected
+    _latestData = SensorData.zero();
     _dataHistory.add(_latestData!);
     notifyListeners();
     
-    // Simulate data coming in every 3 seconds
-    Future.delayed(const Duration(seconds: 3), () {
+    // Check connection status every 10 seconds
+    Future.delayed(const Duration(seconds: 10), () {
       if (!_isConnected) {
-        final newData = SensorData(
-          temperature: 25.0 + (DateTime.now().second % 10),
-          humidity: 60.0 + (DateTime.now().second % 15),
-          conductivity: 450.0 + (DateTime.now().second % 50),
-          ph: 6.5 + (DateTime.now().second % 10) / 10,
-          nutrients: 350.0 + (DateTime.now().second % 100),
-          fertility: 70.0 + (DateTime.now().second % 20),
-          timestamp: DateTime.now(),
-        );
+        // Use zero values when no device is connected
+        final newData = SensorData.zero();
         
         _latestData = newData;
         _dataHistory.add(newData);
@@ -185,9 +192,7 @@ class _MainScreenState extends State<MainScreen> {
     DashboardScreen(title: 'Dashboard'),
     ReportsScreen(),
     GardensScreen(),
-    DiagnosticScreen(),
-    SettingsScreen(),
-    HelpScreen(),
+    DiagnosticScreen()
   ];
   
   void _onItemTapped(int index) {
@@ -206,149 +211,99 @@ class _MainScreenState extends State<MainScreen> {
     final isDesktop = MediaQuery.of(context).size.width >= 800;
     
     // Build the sidebar content that will be used in both desktop and mobile views
-    Widget sidebarContent = Column(
-      children: [
-        // App Logo/Title
-        Container(
-          padding: const EdgeInsets.symmetric(vertical: 24),
-          alignment: Alignment.center,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(
-                Icons.eco,
-                size: 32,
-                color: colorScheme.primary,
-              ),
-              if (isDesktop || MediaQuery.of(context).size.width < 800) ...[  // Always show text in drawer
-                const SizedBox(width: 12),
-                Text(
-                  'Cultivos',
-                  style: TextStyle(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: colorScheme.primary,
+    Widget sidebarContent = Container(
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [
+            const Color(0xFF74B43F), // Verde GrowSense
+            const Color(0xFF4B8B1D), // Verde oscuro GrowSense
+          ],
+          stops: const [0.1, 1.0],
+        ),
+      ),
+      child: Column(
+        children: [
+          // App Logo/Title
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 24),
+            alignment: Alignment.center,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(
+                  Icons.eco,
+                  size: 32,
+                  color: Colors.white,
+                ),
+                if (isDesktop || MediaQuery.of(context).size.width < 800) ...[  // Always show text in drawer
+                  const SizedBox(width: 12),
+                  Text(
+                    'GrowSense',
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
                   ),
+                ],
+              ],
+            ),
+          ),
+          const Divider(color: Colors.white24),
+          // Navigation Items
+          Expanded(
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                _buildNavItem(
+                  icon: Icons.dashboard,
+                  label: 'Monitoreo',
+                  index: 0,
+                  isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+                ),
+                _buildNavItem(
+                  icon: Icons.assessment,
+                  label: 'Reportes',
+                  index: 1,
+                  isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+                ),
+                _buildNavItem(
+                  icon: Icons.eco,
+                  label: 'Huertas',
+                  index: 2,
+                  isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
+                ),
+                _buildNavItem(
+                  icon: Icons.analytics,
+                  label: 'Diagnóstico',
+                  index: 3,
+                  isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
                 ),
               ],
-            ],
+            ),
           ),
-        ),
-        const Divider(),
-        // Navigation Items
-        Expanded(
-          child: ListView(
-            padding: EdgeInsets.zero,
-            children: [
-              _buildNavItem(
-                icon: Icons.dashboard,
-                label: 'Monitoreo',
-                index: 0,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-              _buildNavItem(
-                icon: Icons.assessment,
-                label: 'Reportes',
-                index: 1,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-              _buildNavItem(
-                icon: Icons.eco,
-                label: 'Huertas',
-                index: 2,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-              _buildNavItem(
-                icon: Icons.analytics,
-                label: 'Diagnóstico',
-                index: 3,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-              _buildNavItem(
-                icon: Icons.settings,
-                label: 'Settings',
-                index: 4,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-              _buildNavItem(
-                icon: Icons.help,
-                label: 'Help',
-                index: 5,
-                isDesktop: isDesktop || MediaQuery.of(context).size.width < 800,  // Show text in drawer
-              ),
-            ],
-          ),
-        ),
-        // User profile section at bottom
-        Container(
-          padding: const EdgeInsets.all(16),
-          child: (isDesktop || MediaQuery.of(context).size.width < 800)  // Show full profile in drawer
-              ? Row(
-                  children: [
-                    CircleAvatar(
-                      backgroundColor: colorScheme.primary,
-                      radius: 20,
-                      child: const Icon(
-                        Icons.person,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            'User',
-                            style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                            ),
-                          ),
-                          Text(
-                            'Administrator',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: colorScheme.onSurfaceVariant,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
-                )
-              : CircleAvatar(
-                  backgroundColor: colorScheme.primary,
-                  radius: 20,
-                  child: const Icon(
-                    Icons.person,
-                    color: Colors.white,
-                  ),
-                ),
-        ),
-      ],
+          
+        ],
+      ),
     );
     
     return Scaffold(
       key: _scaffoldKey,
-      // Show AppBar only on mobile
       appBar: !isDesktop ? AppBar(
-        backgroundColor: colorScheme.primaryContainer,
+        backgroundColor: colorScheme.background,
         elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
+        leading: IconButton(
+          icon: Icon(Icons.menu, color: colorScheme.primary),
+          onPressed: () => _scaffoldKey.currentState?.openDrawer(),
         ),
         title: Text(
-          'Cultivos',
+          _screens[_selectedIndex].toString().replaceAll('Screen', ''),
           style: TextStyle(
             fontWeight: FontWeight.bold,
             color: colorScheme.primary,
           ),
-        ),
-        leading: IconButton(
-          icon: const Icon(Icons.menu),
-          onPressed: () {
-            _scaffoldKey.currentState?.openDrawer();
-          },
         ),
       ) : null,
       // Use drawer for mobile and sidebar for desktop
@@ -405,14 +360,12 @@ class _MainScreenState extends State<MainScreen> {
     required bool isDesktop,
   }) {
     final isSelected = _selectedIndex == index;
-    final colorScheme = Theme.of(context).colorScheme;
-    
     return InkWell(
       onTap: () => _onItemTapped(index),
       child: Container(
         height: 56,
         decoration: BoxDecoration(
-          color: isSelected ? colorScheme.primaryContainer : Colors.transparent,
+          color: isSelected ? Colors.white.withOpacity(0.08) : Colors.transparent,
           borderRadius: BorderRadius.circular(8),
         ),
         margin: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
@@ -421,7 +374,7 @@ class _MainScreenState extends State<MainScreen> {
           children: [
             Icon(
               icon,
-              color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+              color: isSelected ? const Color(0xFFE0E0E0) : Colors.white,
             ),
             if (isDesktop) ...[  
               const SizedBox(width: 16),
@@ -429,7 +382,7 @@ class _MainScreenState extends State<MainScreen> {
                 label,
                 style: TextStyle(
                   fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? colorScheme.primary : colorScheme.onSurfaceVariant,
+                  color: isSelected ? const Color(0xFFE0E0E0) : Colors.white,
                 ),
               ),
             ],
@@ -459,11 +412,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     
     return Scaffold(
       appBar: AppBar(
-        backgroundColor: colorScheme.primaryContainer,
+        backgroundColor: colorScheme.background,
         elevation: 0,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-        ),
         title: Text(
           widget.title,
           style: TextStyle(
@@ -471,8 +421,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
             color: colorScheme.primary,
           ),
         ),
-        // No connection button in the app bar since connection is automatic
-        actions: [],
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: () async {
+              final provider = Provider.of<DashboardProvider>(context, listen: false);
+              await provider.refreshDevices();
+              if (provider.serialService.devices.isNotEmpty) {
+                await provider.connectToDevice(provider.serialService.devices[0]);
+              }
+            },
+            tooltip: 'Refresh USB Devices',
+          ),
+          IconButton(
+            icon: const Icon(Icons.usb),
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => const UsbDiagnosticScreen(),
+                ),
+              );
+            },
+            tooltip: 'USB Diagnostic',
+          ),
+        ],
       ),
       body: latestData == null
           ? Center(
@@ -559,16 +532,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       ],
                                     ),
                                   ],
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  onPressed: () async {
-                                    await provider.refreshDevices();
-                                    if (provider.serialService.devices.isNotEmpty) {
-                                      await provider.connectToDevice(provider.serialService.devices[0]);
-                                    }
-                                  },
-                                  tooltip: 'Refresh USB Devices',
                                 ),
                               ],
                             )
@@ -693,45 +656,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     const SizedBox(height: 24),
                     
                     // Historical data chart with enhanced styling
-                    Card(
-                      elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      child: Padding(
-                        padding: const EdgeInsets.all(16.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                              children: [
-                                Text(
-                                  'Historical Data',
-                                  style: TextStyle(
-                                    fontSize: 18, 
-                                    fontWeight: FontWeight.bold,
-                                    color: colorScheme.primary,
-                                  ),
-                                ),
-                                IconButton(
-                                  icon: const Icon(Icons.refresh),
-                                  tooltip: 'Refresh Data',
-                                  onPressed: () {
-                                    // Refresh data
-                                    setState(() {});
-                                  },
-                                ),
-                              ],
-                            ),
-                            const Divider(),
-                            const SizedBox(height: 8),
-                            SizedBox(
-                              height: MediaQuery.of(context).size.width > 600 ? 300 : 250,
-                              child: _buildHistoricalChart(provider.dataHistory),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
+                    
                   ],
                 ),
               ),
@@ -958,62 +883,140 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
   
+  // Track the currently selected measurement type for the chart
+  String _selectedMeasurement = 'Temperature';
+  
   Widget _buildHistoricalChart(List<SensorData> dataHistory) {
     final colorScheme = Theme.of(context).colorScheme;
     final isSmallScreen = MediaQuery.of(context).size.width < 600;
     
-    return SfCartesianChart(
-      plotAreaBorderWidth: 0,
-      margin: EdgeInsets.all(isSmallScreen ? 4 : 8),
-      primaryXAxis: DateTimeAxis(
-        dateFormat: DateFormat('HH:mm:ss'),
-        intervalType: DateTimeIntervalType.seconds,
-        majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
-        axisLine: const AxisLine(width: 0),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
-        labelIntersectAction: AxisLabelIntersectAction.hide,
-        maximumLabels: isSmallScreen ? 3 : 5,
-      ),
-      primaryYAxis: NumericAxis(
-        title: AxisTitle(
-          text: 'Values',
-          textStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 10 : 12),
+    return Column(
+      children: [
+        // Measurement type selector
+        Container(
+          margin: const EdgeInsets.only(bottom: 12),
+          child: SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _buildMeasurementChip('Temperature', Colors.red),
+                _buildMeasurementChip('Humidity', Colors.blue),
+                _buildMeasurementChip('pH', Colors.purple),
+                _buildMeasurementChip('Conductivity', Colors.amber),
+                _buildMeasurementChip('Nutrients', Colors.green),
+                _buildMeasurementChip('Fertility', Colors.orange),
+              ],
+            ),
+          ),
         ),
-        majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
-        axisLine: const AxisLine(width: 0),
-        labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
+        
+        // Chart for the selected measurement
+        Expanded(
+          child: SfCartesianChart(
+            plotAreaBorderWidth: 0,
+            margin: EdgeInsets.all(isSmallScreen ? 4 : 8),
+            primaryXAxis: DateTimeAxis(
+              dateFormat: DateFormat('HH:mm:ss'),
+              intervalType: DateTimeIntervalType.seconds,
+              majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
+              axisLine: const AxisLine(width: 0),
+              labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
+              labelIntersectAction: AxisLabelIntersectAction.hide,
+              maximumLabels: isSmallScreen ? 3 : 5,
+            ),
+            primaryYAxis: NumericAxis(
+              title: AxisTitle(
+                text: _getYAxisTitle(_selectedMeasurement),
+                textStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 10 : 12),
+              ),
+              majorGridLines: const MajorGridLines(width: 0.3, dashArray: [5, 5]),
+              axisLine: const AxisLine(width: 0),
+              labelStyle: TextStyle(color: colorScheme.onSurfaceVariant, fontSize: isSmallScreen ? 8 : 10),
+            ),
+            tooltipBehavior: TooltipBehavior(
+              enable: true,
+              duration: 2000,
+              animationDuration: 500,
+              canShowMarker: true,
+              format: 'point.x : point.y',
+              header: '',
+            ),
+            crosshairBehavior: CrosshairBehavior(
+              enable: true,
+              lineType: CrosshairLineType.both,
+              lineDashArray: <double>[5, 5],
+              lineWidth: 1,
+              lineColor: colorScheme.primary.withOpacity(0.5),
+            ),
+            zoomPanBehavior: ZoomPanBehavior(
+              enablePinching: true,
+              enablePanning: true,
+              enableDoubleTapZooming: true,
+              zoomMode: ZoomMode.x,
+            ),
+            series: <CartesianSeries<SensorData, DateTime>>[
+              // Only show the selected measurement type
+              _getSeriesForMeasurement(_selectedMeasurement, dataHistory),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+  
+  // Helper method to build a selectable chip for each measurement type
+  Widget _buildMeasurementChip(String measurementType, Color color) {
+    final isSelected = _selectedMeasurement == measurementType;
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 4),
+      child: FilterChip(
+        selected: isSelected,
+        label: Text(measurementType),
+        labelStyle: TextStyle(
+          color: isSelected ? Colors.white : colorScheme.onSurface,
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+        ),
+        backgroundColor: colorScheme.surface,
+        selectedColor: color,
+        checkmarkColor: Colors.white,
+        elevation: isSelected ? 3 : 1,
+        onSelected: (selected) {
+          setState(() {
+            _selectedMeasurement = measurementType;
+          });
+        },
       ),
-      legend: Legend(
-        isVisible: true,
-        position: isSmallScreen ? LegendPosition.top : LegendPosition.bottom,
-        overflowMode: LegendItemOverflowMode.wrap,
-        textStyle: TextStyle(color: colorScheme.onSurface, fontSize: isSmallScreen ? 10 : 12),
-        itemPadding: isSmallScreen ? 4 : 8,
-      ),
-      tooltipBehavior: TooltipBehavior(
-        enable: true,
-        duration: 2000,
-        animationDuration: 500,
-        canShowMarker: true,
-        format: 'point.x : point.y',
-        header: '',
-      ),
-      crosshairBehavior: CrosshairBehavior(
-        enable: true,
-        lineType: CrosshairLineType.both,
-        lineDashArray: <double>[5, 5],
-        lineWidth: 1,
-        lineColor: colorScheme.primary.withOpacity(0.5),
-      ),
-      zoomPanBehavior: ZoomPanBehavior(
-        enablePinching: true,
-        enablePanning: true,
-        enableDoubleTapZooming: true,
-        zoomMode: ZoomMode.x,
-      ),
-      series: <CartesianSeries<SensorData, DateTime>>[
-        // Temperature series with enhanced styling
-        LineSeries<SensorData, DateTime>(
+    );
+  }
+  
+  // Helper method to get the appropriate Y-axis title based on measurement type
+  String _getYAxisTitle(String measurementType) {
+    switch (measurementType) {
+      case 'Temperature':
+        return 'Temperature (°C)';
+      case 'Humidity':
+        return 'Humidity (%)';
+      case 'pH':
+        return 'pH';
+      case 'Conductivity':
+        return 'Conductivity (μS/cm)';
+      case 'Nutrients':
+        return 'Nutrients (ppm)';
+      case 'Fertility':
+        return 'Fertility (%)';
+      default:
+        return 'Value';
+    }
+  }
+  
+  // Helper method to get the appropriate series for the selected measurement type
+  LineSeries<SensorData, DateTime> _getSeriesForMeasurement(String measurementType, List<SensorData> dataHistory) {
+    switch (measurementType) {
+      case 'Temperature':
+        return LineSeries<SensorData, DateTime>(
           name: 'Temperature',
           dataSource: dataHistory,
           xValueMapper: (SensorData data, _) => data.timestamp,
@@ -1030,9 +1033,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           animationDuration: 1500,
           enableTooltip: true,
-        ),
-        // Humidity series with enhanced styling
-        LineSeries<SensorData, DateTime>(
+        );
+      case 'Humidity':
+        return LineSeries<SensorData, DateTime>(
           name: 'Humidity',
           dataSource: dataHistory,
           xValueMapper: (SensorData data, _) => data.timestamp,
@@ -1049,9 +1052,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           animationDuration: 1500,
           enableTooltip: true,
-        ),
-        // pH series with enhanced styling
-        LineSeries<SensorData, DateTime>(
+        );
+      case 'pH':
+        return LineSeries<SensorData, DateTime>(
           name: 'pH',
           dataSource: dataHistory,
           xValueMapper: (SensorData data, _) => data.timestamp,
@@ -1068,16 +1071,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           animationDuration: 1500,
           enableTooltip: true,
-        ),
-        // Conductivity series
-        LineSeries<SensorData, DateTime>(
+        );
+      case 'Conductivity':
+        return LineSeries<SensorData, DateTime>(
           name: 'Conductivity',
           dataSource: dataHistory,
           xValueMapper: (SensorData data, _) => data.timestamp,
-          yValueMapper: (SensorData data, _) => data.conductivity / 20, // Scaled for visibility
+          yValueMapper: (SensorData data, _) => data.conductivity,
           color: Colors.amber,
           width: 2.5,
-          dashArray: <double>[5, 3],
           markerSettings: const MarkerSettings(
             isVisible: true,
             height: 6,
@@ -1088,9 +1090,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
           animationDuration: 1500,
           enableTooltip: true,
-        ),
-      ],
-    );
+        );
+      case 'Nutrients':
+        return LineSeries<SensorData, DateTime>(
+          name: 'Nutrients',
+          dataSource: dataHistory,
+          xValueMapper: (SensorData data, _) => data.timestamp,
+          yValueMapper: (SensorData data, _) => data.nutrients,
+          color: Colors.green,
+          width: 2.5,
+          markerSettings: const MarkerSettings(
+            isVisible: true,
+            height: 6,
+            width: 6,
+            shape: DataMarkerType.triangle,
+            borderWidth: 2,
+            borderColor: Colors.green,
+          ),
+          animationDuration: 1500,
+          enableTooltip: true,
+        );
+      case 'Fertility':
+        return LineSeries<SensorData, DateTime>(
+          name: 'Fertility',
+          dataSource: dataHistory,
+          xValueMapper: (SensorData data, _) => data.timestamp,
+          yValueMapper: (SensorData data, _) => data.fertility,
+          color: Colors.orange,
+          width: 2.5,
+          markerSettings: const MarkerSettings(
+            isVisible: true,
+            height: 6,
+            width: 6,
+            shape: DataMarkerType.pentagon,
+            borderWidth: 2,
+            borderColor: Colors.orange,
+          ),
+          animationDuration: 1500,
+          enableTooltip: true,
+        );
+      default:
+        return LineSeries<SensorData, DateTime>(
+          name: 'Temperature',
+          dataSource: dataHistory,
+          xValueMapper: (SensorData data, _) => data.timestamp,
+          yValueMapper: (SensorData data, _) => data.temperature,
+          color: Colors.red,
+          width: 2.5,
+          markerSettings: const MarkerSettings(
+            isVisible: true,
+            height: 6,
+            width: 6,
+            shape: DataMarkerType.circle,
+            borderWidth: 2,
+            borderColor: Colors.red,
+          ),
+          animationDuration: 1500,
+          enableTooltip: true,
+        );
+    }
   }
   
   void _showConnectionDialog() {

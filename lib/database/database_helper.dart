@@ -36,16 +36,36 @@ class DatabaseHelper {
         notas TEXT
       )
     ''');
+    
+    // Crear tabla de huertas
+    await db.execute('''
+      CREATE TABLE gardens(
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        contact TEXT NOT NULL,
+        location TEXT NOT NULL,
+        crop_type TEXT NOT NULL,
+        area REAL,
+        notes TEXT,
+        irrigation_type TEXT,
+        created_at TEXT NOT NULL
+      )
+    ''');
 
     await db.execute('''
       CREATE TABLE mediciones(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        cultivo_id INTEGER NOT NULL,
+        cultivo_id INTEGER,
+        garden_id TEXT,
         fecha TEXT NOT NULL,
         temperatura REAL,
         humedad REAL,
         ph REAL,
-        FOREIGN KEY (cultivo_id) REFERENCES cultivos (id)
+        conductividad REAL,
+        nutrientes REAL,
+        fertilidad REAL,
+        FOREIGN KEY (cultivo_id) REFERENCES cultivos (id),
+        FOREIGN KEY (garden_id) REFERENCES gardens (id)
       )
     ''');
   }
@@ -104,4 +124,60 @@ class DatabaseHelper {
       whereArgs: [cultivoId],
     );
   }
-} 
+  
+  // Métodos para operaciones CRUD de gardens (huertas)
+  Future<int> insertGarden(Map<String, dynamic> garden) async {
+    Database db = await database;
+    return await db.insert('gardens', garden);
+  }
+  
+  Future<List<Map<String, dynamic>>> getGardens() async {
+    Database db = await database;
+    return await db.query('gardens');
+  }
+  
+  Future<Map<String, dynamic>?> getGarden(String id) async {
+    Database db = await database;
+    List<Map<String, dynamic>> results = await db.query(
+      'gardens',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+    return results.isNotEmpty ? results.first : null;
+  }
+  
+  Future<int> updateGarden(Map<String, dynamic> garden) async {
+    Database db = await database;
+    return await db.update(
+      'gardens',
+      garden,
+      where: 'id = ?',
+      whereArgs: [garden['id']],
+    );
+  }
+  
+  Future<int> deleteGarden(String id) async {
+    Database db = await database;
+    return await db.delete(
+      'gardens',
+      where: 'id = ?',
+      whereArgs: [id],
+    );
+  }
+  
+  // Métodos para mediciones asociadas a huertas
+  Future<int> insertGardenMeasurement(Map<String, dynamic> measurement) async {
+    Database db = await database;
+    return await db.insert('mediciones', measurement);
+  }
+  
+  Future<List<Map<String, dynamic>>> getGardenMeasurements(String gardenId) async {
+    Database db = await database;
+    return await db.query(
+      'mediciones',
+      where: 'garden_id = ?',
+      whereArgs: [gardenId],
+      orderBy: 'fecha DESC'
+    );
+  }
+}

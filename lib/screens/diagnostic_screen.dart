@@ -31,19 +31,6 @@ class _DiagnosticScreenState extends State<DiagnosticScreen> {
     }
     
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: colorScheme.primaryContainer,
-        shape: const RoundedRectangleBorder(
-          borderRadius: BorderRadius.zero,
-        ),
-        title: Text(
-          'Diagnóstico de Cultivos',
-          style: TextStyle(
-            fontWeight: FontWeight.bold,
-            color: colorScheme.primary,
-          ),
-        ),
-      ),
       body: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
